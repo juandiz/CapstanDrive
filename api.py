@@ -20,6 +20,7 @@ motor : MotorController = None
 @app.post("/motor/connect")
 async def set_home_position():
     """Write a UTF-8 string to serial port."""
+    global motor
     try:
         print("Initializing motor")
 
@@ -39,6 +40,7 @@ async def set_home_position():
 @app.post("/motor/calibrate")
 async def set_home_position():
     """Write a UTF-8 string to serial port."""
+    global motor
     try:
         print("Calibrate motor") 
         motor.calibrate()
@@ -51,6 +53,7 @@ async def set_home_position():
 @app.post("/motor/release")
 async def set_home_position():
     """Write a UTF-8 string to serial port."""
+    global motor
     try:
         print("Releasing motor") 
         motor.release_torque()
@@ -63,6 +66,7 @@ async def set_home_position():
 @app.post("/motor/set_home")
 async def set_home_position():
     """Write a UTF-8 string to serial port."""
+    global motor
     try:
         print("Set new home")
         motor.set_home()
@@ -77,6 +81,7 @@ async def set_home_position():
 @app.post("/motor/set_position/{position}")
 async def set_position(position: float):
     """Read data and decode as UTF-8 string."""
+    global motor
     try:
         print("setting position to", position)
         motor.set_pos(position)
@@ -91,6 +96,7 @@ async def set_position(position: float):
 @app.post("/motor/get_values")
 async def set_position():
     """Read data and decode as UTF-8 string."""
+    global motor
     try:
         pos = motor.get_position()
         vel = motor.get_velocity()
