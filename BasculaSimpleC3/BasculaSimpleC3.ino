@@ -5,6 +5,8 @@
  * It prints the raw ADC values via serial communication.
  */
 
+#include "ArduinoJson.h"
+
 // Define the pin connections
 const int DOUT_PIN = 10;  // DRDY/DOUT pin
 const int SCLK_PIN = 9;  // SCLK pin
@@ -18,12 +20,26 @@ const int OFFSET = 7700;  // Power down pin
 
 // Load cell calibration values
 int32_t zeroOffset = 0;       // ADC reading at no load
-int32_t calibrationValue = 0; // ADC reading at known weight
+int32_t calibrationValue = 80000; // ADC reading at known weight
 float knownWeight = 1.0;      // Known calibration weight in kg
 bool isCalibrated = false;    // Flag to indicate if calibration has been done
+int16_t sendValuesIntervalLoops = 5;
+int8_t sendValuesCounter = 0;
+int16_t loopDelay = 100;
 
+// Create a DynamicJsonDocument with a capacity of 200 bytes
+DynamicJsonDocument doc(200);
 
 void setup() {
+
+  doc["adcValue"] = 0;
+  doc["zeroOffset"] = 0;
+  doc["offsetCorrected"] = 0;
+  doc["isCalibrated"] = false;
+  doc["knownWeight"] = 00;
+  doc["calibrationValue"] = 0;
+  doc["calculatedWeight"] = 0;
+
   // Initialize serial communication at 115200 baud
   Serial.begin(115200);
   while (!Serial) {
@@ -81,7 +97,14 @@ void setup() {
 //   delay(10);  // Short delay between readings
 // }
 
+void sendCurrentValues(){
+  // Serialize JSON to string and print
+  serializeJson(doc, Serial);
+  Serial.println();
+}
+
 void loop() {
+
   // Check for serial commands
   if (Serial.available() > 0) {
     char command = Serial.read();
@@ -96,6 +119,9 @@ void loop() {
       case 'r': // Reset calibration
         resetCalibration();
         break;
+      case 'g':
+        sendCurrentValues();
+        break;
     }
   }
   
@@ -108,21 +134,30 @@ void loop() {
     float weight = convertToWeight(adcValue);
     
     // Print the raw ADC value and weight
-    Serial.print("ADC: ");
-    Serial.print(adcValue);
+    // Serial.print("ADC: ");
+    // Serial.print(adcValue);
+      doc["adcValue"] = adcValue;
+      doc["isCalibrated"] = isCalibrated;
+      doc["calculatedWeight"] = weight;
     
-    if (isCalibrated) {
-      Serial.print(", Weight: ");
-      Serial.print(weight, 3);  // 3 decimal places
-      Serial.println(" kg");    // Adjust unit as needed
-    } else {
-      Serial.print(", Uncalibrated: ");
-      Serial.println(weight, 3);
-      Serial.println("Please calibrate using 't' and 'c' commands");
-    }
+    // if (isCalibrated) {
+    //   Serial.print(", Weight: ");
+    //   Serial.print(weight, 3);  // 3 decimal places
+    //   Serial.println(" kg");    // Adjust unit as needed
+    // } else {
+    //   Serial.print(", Uncalibrated: ");
+    //   Serial.println(weight, 3);
+    //   Serial.println("Please calibrate using 't' and 'c' commands");
+    // }
   }
   
-  delay(100);  // Short delay between readings
+  delay(loopDelay);  // Short delay between readings
+
+  // sendValuesCounter += 1;
+  // if(sendValuesCounter >= sendValuesIntervalLoops){
+  //   sendCurrentValues();
+  //   sendValuesCounter = 0;
+  // }
 }
 
 void waitForDataReady() {
@@ -182,8 +217,32 @@ float convertToWeight(int32_t adcValue) {
     return offsetCorrected / 1000.0;
   }
   
+  // Pretty print all variables
+  // Serial.println("=== Debug Info ===");
+  // Serial.print("ADC Value: ");
+  // Serial.println(adcValue);
+  // Serial.print("Zero Offset: ");
+  // Serial.println(zeroOffset);
+  // Serial.print("Offset Corrected: ");
+  // Serial.println(offsetCorrected);
+  // Serial.print("Calibration: ");
+  // Serial.println(calibrationValue);
+  // Serial.print("Calibration weigth: ");
+  // Serial.println(knownWeight);
+  // Serial.print("Is Calibrated: ");
+  // Serial.println(isCalibrated ? "Yes" : "No");
+
   // Calculate weight based on calibration
-  float weight = offsetCorrected * knownWeight / (calibrationValue - zeroOffset);
+  float val1 = ((float)offsetCorrected * (float)knownWeight);
+  float val2 = ((float)calibrationValue - (float)zeroOffset);
+  float weight = val1 /  val2;
+
+  // Serial.print("val1: ");
+  // Serial.println(val1);
+  // Serial.print("val2: ");
+  // Serial.println(val2);
+  // Serial.print("weight: ");
+  // Serial.println(weight);
   
   return weight;
 }
@@ -221,6 +280,8 @@ void performTare() {
   zeroOffset = sum / samples;
   Serial.print("Zero offset set to: ");
   Serial.println(zeroOffset);
+
+  doc["zeroOffset"] = zeroOffset;
 }
 
 // Calibration function - use a known weight
@@ -233,7 +294,7 @@ void performCalibration() {
   }
   
   // Read the known weight value
-  knownWeight = Serial.parseFloat();
+  // knownWeight = Serial.parseFloat();
   Serial.print("Using ");
   Serial.print(knownWeight);
   Serial.println(" kg as calibration weight");
@@ -252,10 +313,15 @@ void performCalibration() {
   
   calibrationValue = sum / samples;
   isCalibrated = true;
+
+  doc["offsetCorrected"] = 0;
+  doc["isCalibrated"] = isCalibrated;
+  doc["knownWeight"] = knownWeight;
+  doc["calibrationValue"] = calibrationValue;
   
-  Serial.print("Calibration value set to: ");
-  Serial.println(calibrationValue);
-  Serial.println("Calibration complete!");
+  // Serial.print("Calibration value set to: ");
+  // Serial.println(calibrationValue);
+  // Serial.println("Calibration complete!");
 }
 
 // Reset calibration
@@ -263,7 +329,7 @@ void resetCalibration() {
   zeroOffset = 0;
   calibrationValue = 0;
   isCalibrated = false;
-  Serial.println("Calibration reset");
+  // Serial.println("Calibration reset");
 }
 
 

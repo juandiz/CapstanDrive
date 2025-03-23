@@ -15,14 +15,16 @@ class MotorController:
 
     requests: list[MotorRequest] = []
     def __init__(self) -> None:
-        odrv0 = odrive.find_any()
-        try:
-            odrv0.erase_configuration()
-        except:
-            print("Erase config and reboot") # Saving configuration makes the device reboot
         self.odrv0 = odrive.find_any()
-        self.odrv0.clear_errors()
         self.init_offset_pos = 0.0
+        if self.odrv0.reboot_required: 
+            try:
+                self.odrv0.erase_configuration()
+            except:
+                print("Erase config and reboot") # Saving configuration makes the device reboot
+            self.odrv0.clear_errors()
+        else:
+            print("Connecting to configured motor")
 
     def run(self):
         self.control_running = True
