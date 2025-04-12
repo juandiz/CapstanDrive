@@ -26,6 +26,7 @@ bool isCalibrated = false;    // Flag to indicate if calibration has been done
 int16_t sendValuesIntervalLoops = 5;
 int8_t sendValuesCounter = 0;
 int16_t loopDelay = 100;
+bool continuousUpdate = false;
 
 // Create a DynamicJsonDocument with a capacity of 200 bytes
 DynamicJsonDocument doc(200);
@@ -64,7 +65,6 @@ void setup() {
   // Optional configuration for additional control pins
   // pinMode(SPEED_PIN, OUTPUT);
   // digitalWrite(SPEED_PIN, LOW);  // 10 SPS mode (LOW = 10 SPS, HIGH = 80 SPS)
-  
  
   Serial.println("ADS1230 Reader Initialized");
   Serial.println("Read One data to clean buffer");
@@ -75,40 +75,38 @@ void setup() {
   delay(10);  // Short delay for setup
 }
 
-// void noloop() {
-//   // Check if data is ready (DRDY is LOW when data is ready)
-//   if (digitalRead(DOUT_PIN) == LOW) {
-//     // Read the 24-bit value
-//     int32_t adcValue = readADS1230() - OFFSET;
-    
-//     // Print the raw ADC value
-//     // Serial.print("ADS1230 Raw Value: ");
-//     // Serial.println(adcValue);
-
-//     float weight = convertToWeight(adcValue, 1);
-//     Serial.println(weight, 6);
-    
-//     // Optional: Convert to voltage or weight depending on your application
-//     // float voltage = convertToVoltage(adcValue);
-//     // Serial.print("Voltage: ");
-//     // Serial.println(voltage, 6);
-//   }
-  
-//   delay(10);  // Short delay between readings
-// }
-
 void sendCurrentValues(){
   // Serialize JSON to string and print
   serializeJson(doc, Serial);
   Serial.println();
 }
 
-void loop() {
+void selectMode() {
+  // Wait for weight input
+  while (!Serial.available()) {
+    delay(100);
+  }
+  
+  // Read the known weight value
+  char mode = Serial.read();
+  if (mode == 'm'){
+    continuousUpdate = false;
+    Serial.print("Manual mode selected");
+  }
+  else if (mode == 'a'){
+    continuousUpdate = true;
+    Serial.print("Automatic mode selected");
+  }
+  else{
+    Serial.print("Unsupported mode");
+    Serial.println(mode);
+  }
+}
 
+void readCommands(){
   // Check for serial commands
   if (Serial.available() > 0) {
     char command = Serial.read();
-    
     switch (command) {
       case 't': // Tare - set zero point
         performTare();
@@ -122,9 +120,14 @@ void loop() {
       case 'g':
         sendCurrentValues();
         break;
+      case 'm': // mode selection
+        selectMode();
+        break;
     }
   }
-  
+}
+
+void checkDataReady(){
   // Check if data is ready (DRDY is LOW when data is ready)
   if (digitalRead(DOUT_PIN) == LOW) {
     // Read the 20-bit value
@@ -150,14 +153,14 @@ void loop() {
     //   Serial.println("Please calibrate using 't' and 'c' commands");
     // }
   }
-  
-  delay(loopDelay);  // Short delay between readings
+}
 
-  // sendValuesCounter += 1;
-  // if(sendValuesCounter >= sendValuesIntervalLoops){
-  //   sendCurrentValues();
-  //   sendValuesCounter = 0;
-  // }
+void loop() {
+  readCommands();
+  checkDataReady();
+  if(continuousUpdate)
+    sendCurrentValues();
+  delay(loopDelay);  // Short delay between readings
 }
 
 void waitForDataReady() {
@@ -294,10 +297,7 @@ void performCalibration() {
   }
   
   // Read the known weight value
-  // knownWeight = Serial.parseFloat();
-  Serial.print("Using ");
-  Serial.print(knownWeight);
-  Serial.println(" kg as calibration weight");
+  knownWeight = Serial.parseFloat();
   
   delay(1000);  // Give time to stabilize
   
@@ -318,10 +318,10 @@ void performCalibration() {
   doc["isCalibrated"] = isCalibrated;
   doc["knownWeight"] = knownWeight;
   doc["calibrationValue"] = calibrationValue;
-  
-  // Serial.print("Calibration value set to: ");
-  // Serial.println(calibrationValue);
-  // Serial.println("Calibration complete!");
+
+  Serial.print("Using ");
+  Serial.print(knownWeight);
+  Serial.println(" kg as calibration weight");
 }
 
 // Reset calibration
