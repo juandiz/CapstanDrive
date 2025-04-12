@@ -9,7 +9,7 @@ from matplotlib.backends.backend_tkagg import (
 ) 
 from motor_controller import MotorController
 
-import serial
+import load_cell_reader
 
 # Initialize the Tkinter root window
 root = tk.Tk()
@@ -21,7 +21,7 @@ SERSOR_BR = 115200
 INTERVAL_VALUES_UPDATE = 0.1
 
 motor : MotorController = None
-ser: serial.Serial = None
+ser: load_cell_reader.LoadCellreader = None
 thread: threading.Thread = None
 check_values : bool = False
 position_values = []
@@ -115,43 +115,18 @@ def calibrate(event=None):
     print("Calibrate motor") 
     motor.calibrate()
 
-import json
-def get_current_force():
-    global ser
-    try:
-        ser.write(b'g')
-        time.sleep(0.1)
-        current_values = ser.readline()
-        values = current_values.decode()
-        val_map = json.loads(values)
-    
-        print(f"Force data: {val_map}")
-        return val_map["calculatedWeight"]
-    except:
-        return None 
-
 def calibrate_lc(event=None):
     global ser
     print("Calibrate Load cell") 
 
-    if not ser or not ser.is_open:
+    if not ser.isConnected():
         messages_output.config(text="Error Load Cell not connected")
 
     try:
 
-        buffer =  ser.read_all()
+        buffer =  ser.calibrate_lc()
         if buffer:
-            messages_output.config(text=f"Message from cell: {buffer.decode()}")
-
-        # calibrate
-        ser.write(b'c')
-        time.sleep(0.2)
-        ser.write(b'1.0')
-        time.sleep(0.2)
-        
-        buffer =  ser.read_all()
-        if buffer:
-            messages_output.config(text=f"Message from cell: {buffer.decode()}")
+            messages_output.config(text=f"Message from cell: {buffer}")
 
     except:
         messages_output.config(text="Error connecting with Load Cell")
@@ -160,22 +135,13 @@ def tare_lc(event=None):
     global ser
     print("Tare Load cell") 
 
-    if not ser or not ser.is_open:
+    if not ser.isConnected():
         messages_output.config(text="Error Load Cell not connected")
 
     try:
-
-        buffer =  ser.read_all()
+        buffer =  ser.calibrate_lc()
         if buffer:
-            messages_output.config(text=f"Message from cell: {buffer.decode()}")
-
-        #tare
-        ser.write(b't')
-        time.sleep(0.2)
-        
-        buffer =  ser.read_all()
-        if buffer:
-            messages_output.config(text=f"Message from cell: {buffer.decode()}")
+            messages_output.config(text=f"Message from cell: {buffer}")
 
     except:
         messages_output.config(text="Error connecting with Load Cell")
@@ -183,20 +149,18 @@ def tare_lc(event=None):
 def connect_lc(event=None):
     global ser
 
-    if ser and ser.is_open:
-        ser.close()
+    if ser and ser.isConnected():
+        ser.disconnect()
 
     try:
         # try to connect serial force sensor
-        ser = serial.Serial(SENSOR_COM, SERSOR_BR, timeout = 2)  # open serial port
-
-        init_message =  ser.read_all()
-        if init_message:
-            messages_output.config(text=f"Message from cell: {init_message.decode()}")
+        ser = load_cell_reader.LoadCellreader(SENSOR_COM, SERSOR_BR)  # open serial port
+        buffer = ser.readBuffer()
+        if buffer:
+            messages_output.config(text=f"Message from cell: {buffer}")
 
     except:
         messages_output.config(text="Error connecting with Load Cell")
-
 def connect():
 
     global motor, thread, check_values
@@ -211,7 +175,7 @@ def connect():
             velocity_values.append(vel)
             torque_values.append(torq)
             position_output.config(text=f"Pos [deg]: {pos:.2f}")
-            force = get_current_force()
+            force = ser.get_current_force()
             force_values.append(force)
             plot(position_values, ax)
             plot(velocity_values, ax_vel)
