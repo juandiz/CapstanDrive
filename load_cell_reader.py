@@ -2,6 +2,17 @@ import serial
 import time
 import json
 import threading
+from pydantic import BaseModel
+from typing import Optional
+
+class LoadCellData(BaseModel):
+    adcValue: Optional[int] = 0
+    zeroOffset: Optional[int] = 0
+    offsetCorrected: Optional[int] = 0
+    isCalibrated: Optional[bool] = False
+    knownWeight: Optional[int] = 0
+    calibrationValue: Optional[int] = 0
+    calculatedWeight: Optional[float] = 0.0
 
 class LoadCellreader:
     def __init__(self, com: str, baud_rate: int) -> None:
@@ -9,9 +20,16 @@ class LoadCellreader:
         self.ser_buffer = b''
         self.read_thread = None
         self.running = False
+        self.last_read = LoadCellData()
 
     def callback(self, msg: str):
-        print(msg)
+        try:
+            self.last_read = LoadCellData(**json.loads(msg))
+        except:
+            print(msg)
+    
+    def get_data(self):
+        return self.last_read
 
     def continuously_read(self):
         while self.running:

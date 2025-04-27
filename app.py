@@ -29,9 +29,6 @@ velocity_values = []
 torque_values = []
 force_values = []
 
-def load_callback(msg):
-    messages_output.config(text=msg)
-
 # Function to start the application
 def set_position(event=None):
     # Read the integer input and validate
@@ -158,7 +155,7 @@ def connect_lc(event=None):
     try:
         # try to connect serial force sensor
         ser = load_cell_reader.LoadCellreader(SENSOR_COM, SERSOR_BR)  # open serial port
-        ser.attach_callback(load_callback)
+        ser.start()
         buffer = ser.readBuffer()
         if buffer:
             messages_output.config(text=f"Message from cell: {buffer}")
@@ -180,7 +177,7 @@ def connect():
             velocity_values.append(vel)
             torque_values.append(torq)
             position_output.config(text=f"Pos [deg]: {pos:.2f}")
-            force = ser.get_current_force() if ser else 0
+            force = ser.get_data().calculatedWeight if ser else 0
             force_values.append(force)
             plot(position_values, ax)
             plot(velocity_values, ax_vel)
