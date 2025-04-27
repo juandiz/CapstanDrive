@@ -1,6 +1,8 @@
 import tkinter as tk
 import time
 import threading
+import csv
+import datetime
 
 from matplotlib.figure import Figure 
 from matplotlib.backends.backend_tkagg import (
@@ -10,6 +12,12 @@ from matplotlib.backends.backend_tkagg import (
 from motor_controller import MotorController
 
 import load_cell_reader
+# CSV file with date and time in file name
+csv_name = f"captan_drive_test_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+csvfile = open(csv_name, 'w', newline='')
+fieldnames = ['timestamp', 'position', 'torque', 'velocity', 'force']
+writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+writer.writeheader()
 
 # Initialize the Tkinter root window
 root = tk.Tk()
@@ -146,6 +154,36 @@ def tare_lc(event=None):
     except:
         messages_output.config(text="Error connecting with Load Cell")
 
+def update_csv_file(data: list[dict]):
+    writer.writerows(data)
+
+def load_cell_cb(data: load_cell_reader.LoadCellData):
+    
+    # get values
+    pos = motor.get_position() if motor else 0.0
+    vel = motor.get_velocity() if motor else 0.0
+    torq = motor.get_torque() if motor else 0.0
+    force = data.calculatedWeight if data else 0.0
+
+    # update lists
+    position_values.append(pos)
+    velocity_values.append(vel)
+    torque_values.append(torq)
+    force_values.append(force)
+
+    # update interface
+    position_output.config(text=f"Pos [deg]: {pos:.2f}")
+
+    # save information
+    data = {
+        'timestamp': datetime.datetime.now().timestamp(), 
+        'position': pos, 
+        'torque': torq, 
+        'velocity': vel, 
+        'force': force
+    }
+    update_csv_file([data])
+
 def connect_lc(event=None):
     global ser
 
@@ -155,7 +193,7 @@ def connect_lc(event=None):
     try:
         # try to connect serial force sensor
         ser = load_cell_reader.LoadCellreader(SENSOR_COM, SERSOR_BR)  # open serial port
-        ser.start()
+        ser.start(load_cell_cb)
         buffer = ser.readBuffer()
         if buffer:
             messages_output.config(text=f"Message from cell: {buffer}")
@@ -163,50 +201,37 @@ def connect_lc(event=None):
     except:
         messages_output.config(text="Error connecting with Load Cell")
 
+def run_updates():
+    while check_values:
+        # Update each output with a random float
+        plot(position_values, ax)
+        plot(velocity_values, ax_vel)
+        plot(torque_values, ax_torq)
+        plot(force_values, ax_force)
+        graph.draw()
+        time.sleep(INTERVAL_VALUES_UPDATE)  # Update every second
+
 def connect():
 
     global motor, thread, check_values
-
-    def run_updates():
-        while check_values:
-            # Update each output with a random float
-            pos = motor.get_position()
-            vel = motor.get_velocity()
-            torq = motor.get_torque()
-            position_values.append(pos)
-            velocity_values.append(vel)
-            torque_values.append(torq)
-            position_output.config(text=f"Pos [deg]: {pos:.2f}")
-            force = ser.get_data().calculatedWeight if ser else 0
-            force_values.append(force)
-            plot(position_values, ax)
-            plot(velocity_values, ax_vel)
-            plot(torque_values, ax_torq)
-            plot(force_values, ax_force)
-            graph.draw()
-            time.sleep(INTERVAL_VALUES_UPDATE)  # Update every second
     
-    if thread == None :
+    # if thread == None :
 
-        print("Initializing motor")
+    print("Initializing motor")
 
-        messages_output.config(text="Waitting for motor to connect")
-        motor = MotorController()
-        
-        messages_output.config(text="Configuring motor")
-        motor.config()
-        motor.save_and_reboot()
+    messages_output.config(text="Waitting for motor to connect")
+    motor = MotorController()
+    
+    messages_output.config(text="Configuring motor")
+    motor.config()
+    motor.save_and_reboot()
 
-        # Start the updates in a separate thread
-        check_values = True
-        thread = threading.Thread(target=run_updates, daemon=True)
-        thread.start()
-    else:
-        print("Disconnecting motor")
-        messages_output.config(text="Disconnecting motor")
-        check_values = False
-        thread.join()
-        thread = None
+    # else:
+    #     print("Disconnecting motor")
+    #     messages_output.config(text="Disconnecting motor")
+    #     check_values = False
+    #     thread.join()
+    #     thread = None
 
 # Create labels for the outputs
 input_frame = tk.LabelFrame(root, text='Input and Info', padx=10, pady=10)
@@ -261,5 +286,16 @@ messages_output.pack(side="left",pady=5)
 clear_graph = tk.Button(load_cell_frame, text="Clear Graphs", command=clear_graphs)
 clear_graph.pack(side="left", padx=10, pady=10)
 
+# Start the updates in a separate thread
+check_values = True
+thread = threading.Thread(target=run_updates, daemon=True)
+thread.start()
+
 # Start the Tkinter main loop
 root.mainloop()
+
+print("Disconnecting motor")
+messages_output.config(text="Disconnecting motor")
+check_values = False
+thread.join()
+thread = None

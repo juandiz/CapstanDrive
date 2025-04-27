@@ -130,6 +130,9 @@ void readCommands(){
 void checkDataReady(){
   // Check if data is ready (DRDY is LOW when data is ready)
   if (digitalRead(DOUT_PIN) == LOW) {
+
+    Serial.print("New value ready");
+    
     // Read the 20-bit value
     int32_t adcValue = readADS1230();
     
@@ -152,14 +155,15 @@ void checkDataReady(){
     //   Serial.println(weight, 3);
     //   Serial.println("Please calibrate using 't' and 'c' commands");
     // }
+    // data is rady and continius update on
+    if(continuousUpdate)
+      sendCurrentValues();
   }
 }
 
 void loop() {
   readCommands();
   checkDataReady();
-  if(continuousUpdate)
-    sendCurrentValues();
   delay(loopDelay);  // Short delay between readings
 }
 

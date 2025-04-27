@@ -21,12 +21,15 @@ class LoadCellreader:
         self.read_thread = None
         self.running = False
         self.last_read = LoadCellData()
+        self.callback = None
 
-    def callback(self, msg: str):
+    def parse_message(self, msg: str):
         try:
             self.last_read = LoadCellData(**json.loads(msg))
-        except:
-            print(msg)
+            if self.callback:
+                self.callback(self.last_read)
+        except Exception as e:
+            print(f"Exception parsing values {e}:{msg}")
     
     def get_data(self):
         return self.last_read
@@ -41,14 +44,15 @@ class LoadCellreader:
             #     val_map = json.loads(values_decoded)
             #     self.callback(val_map)
             # except:
-            self.callback(values_decoded)
+            self.parse_message(values_decoded)
 
-    def start(self):
+    def start(self, callback = None):
         self.setAutomaticMode()
         if not self.read_thread:
             self.running = True
             self.read_thread = threading.Thread(target=self.continuously_read)
             self.read_thread.start()
+            self.callback = callback
     
     def setAutomaticMode(self):
         print("Set Mode Load cell") 
