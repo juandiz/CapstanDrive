@@ -9,7 +9,7 @@ from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg, 
     NavigationToolbar2Tk
 ) 
-from motor_controller import MotorController
+from motor_controller import MotorController, LoopFlowData
 
 import load_cell_reader
 # CSV file with date and time in file name
@@ -27,6 +27,8 @@ root.geometry("300x200")
 SENSOR_COM = 'COM4'
 SERSOR_BR = 115200
 INTERVAL_VALUES_UPDATE = 0.1
+MAX_VALUES = 1000
+init_time = 0
 
 motor : MotorController = None
 ser: load_cell_reader.LoadCellreader = None
@@ -36,6 +38,7 @@ position_values = []
 velocity_values = []
 torque_values = []
 force_values = []
+timestamps = []
 
 # Function to start the application
 def set_position(event=None):
@@ -56,7 +59,7 @@ fig = Figure(figsize = (3, 3),
             dpi = 100) 
 
 # adding the subplot 
-ax = fig.add_subplot(411) 
+ax = fig.add_subplot(411)
 ax.set_xlabel("s") 
 ax.set_ylabel("deg") 
 ax.set_title("Postion")
@@ -82,16 +85,12 @@ ax_force.grid()
 
 graph = FigureCanvasTkAgg(fig, master=root) 
 graph.get_tk_widget().pack(side="top",fill='both',expand=True) 
-MAX_VALUES = 100
 
-def plot(values, ax_to_plot): 
+def plot(values, val_y,  ax_to_plot): 
     ax_to_plot.cla() 
     ax_to_plot.grid()
     val_len = len(values)
-    init_index = val_len - MAX_VALUES
-    if init_index < 0:
-        init_index = 0
-    ax_to_plot.plot(range(init_index, val_len),values[init_index:])
+    ax_to_plot.plot(range(0, val_len), values)
 
 def clear_values(array: list, percentage: float = 0.8):
     prev_len = len(array)
@@ -157,7 +156,19 @@ def tare_lc(event=None):
 def update_csv_file(data: list[dict]):
     writer.writerows(data)
 
+def limit_data_len(data: list):
+    val_len = len(data)
+    if val_len > MAX_VALUES:
+        data = data[-MAX_VALUES:]
+        val_len = MAX_VALUES
+    return data
+
 def load_cell_cb(data: load_cell_reader.LoadCellData):
+
+    global position_values, velocity_values, torque_values, force_values
+
+    ts = datetime.datetime.now().timestamp()
+    timestamps.append(ts)
     
     # get values
     pos = motor.get_position() if motor else 0.0
@@ -171,12 +182,18 @@ def load_cell_cb(data: load_cell_reader.LoadCellData):
     torque_values.append(torq)
     force_values.append(force)
 
+    # limit list
+    position_values = limit_data_len(position_values)
+    velocity_values = limit_data_len(velocity_values)
+    torque_values = limit_data_len(torque_values)
+    force_values = limit_data_len(force_values)
+
     # update interface
     position_output.config(text=f"Pos [deg]: {pos:.2f}")
 
     # save information
     data = {
-        'timestamp': datetime.datetime.now().timestamp(), 
+        'timestamp': ts, 
         'position': pos, 
         'torque': torq, 
         'velocity': vel, 
@@ -202,12 +219,18 @@ def connect_lc(event=None):
         messages_output.config(text="Error connecting with Load Cell")
 
 def run_updates():
+    global timestamps
     while check_values:
+
+        ts_len = len(timestamps)    
+        if ts_len > MAX_VALUES:
+            timestamps = timestamps[-MAX_VALUES:]
+
         # Update each output with a random float
-        plot(position_values, ax)
-        plot(velocity_values, ax_vel)
-        plot(torque_values, ax_torq)
-        plot(force_values, ax_force)
+        plot(position_values, timestamps, ax)
+        plot(velocity_values, timestamps,ax_vel)
+        plot(torque_values, timestamps, ax_torq)
+        plot(force_values, timestamps, ax_force)
         graph.draw()
         time.sleep(INTERVAL_VALUES_UPDATE)  # Update every second
 
@@ -226,12 +249,22 @@ def connect():
     motor.config()
     motor.save_and_reboot()
 
-    # else:
-    #     print("Disconnecting motor")
-    #     messages_output.config(text="Disconnecting motor")
-    #     check_values = False
-    #     thread.join()
-    #     thread = None
+def run_step_loop():
+    global motor
+    steps = []
+    steps.append(LoopFlowData(position=300, delay_ms= 2000))
+    steps.append(LoopFlowData(position=400, delay_ms= 1000))
+    steps.append(LoopFlowData(position=500, delay_ms= 2000))
+    steps.append(LoopFlowData(position=300, delay_ms= 2000))
+    steps.append(LoopFlowData(position=700, delay_ms= 5000))
+    steps.append(LoopFlowData(position=400, delay_ms= 2000))
+    steps.append(LoopFlowData(position=800, delay_ms= 3000))
+    steps.append(LoopFlowData(position=500, delay_ms= 1000))
+    motor.set_loop_flow(steps)
+
+def stop_step_loop():
+    global motor
+    motor.stop_steps_loop()
 
 # Create labels for the outputs
 input_frame = tk.LabelFrame(root, text='Input and Info', padx=10, pady=10)
@@ -251,6 +284,12 @@ home_button = tk.Button(motor_frame, text="Home", command=reset_to_home)
 home_button.pack(side="left", padx=10, pady=10)
 
 release_button = tk.Button(motor_frame, text="Release", command=release)
+release_button.pack(side="left", padx=10, pady=10)
+
+release_button = tk.Button(motor_frame, text="Run Steps", command=run_step_loop)
+release_button.pack(side="left", padx=10, pady=10)
+
+release_button = tk.Button(motor_frame, text="Stop Steps", command=stop_step_loop)
 release_button.pack(side="left", padx=10, pady=10)
 
 # Create and place the input label and entry

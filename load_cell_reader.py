@@ -45,6 +45,7 @@ class LoadCellreader:
             #     self.callback(val_map)
             # except:
             self.parse_message(values_decoded)
+            self.ser.read_all() ## clear buffer
 
     def start(self, callback = None):
         self.setAutomaticMode()
