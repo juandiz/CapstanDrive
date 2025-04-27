@@ -131,8 +131,6 @@ void checkDataReady(){
   // Check if data is ready (DRDY is LOW when data is ready)
   if (digitalRead(DOUT_PIN) == LOW) {
 
-    Serial.print("New value ready");
-    
     // Read the 20-bit value
     int32_t adcValue = readADS1230();
     
@@ -164,7 +162,6 @@ void checkDataReady(){
 void loop() {
   readCommands();
   checkDataReady();
-  delay(loopDelay);  // Short delay between readings
 }
 
 void waitForDataReady() {

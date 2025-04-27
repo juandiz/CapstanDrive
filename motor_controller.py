@@ -11,12 +11,16 @@ class MotorRequest:
     velocity: float = 30  # deg/s
     position: float = 0.0   # deg
 
+class LoopFlowData:
+    def __init__(self, delay_ms: int, position: int):
+        self.delay_ms = delay_ms
+        self.position = position
+
 class MotorController:
 
     requests: list[MotorRequest] = []
     def __init__(self) -> None:
         self.odrv0 = odrive.find_any()
-        self.init_offset_pos = 0.0
         if self.odrv0.reboot_required: 
             try:
                 self.odrv0.erase_configuration()
@@ -45,8 +49,8 @@ class MotorController:
     
     def config(self):
         odrv = self.odrv0
-        odrv.config.dc_bus_overvoltage_trip_level = 30
-        odrv.config.dc_bus_undervoltage_trip_level = 10.5
+        odrv.config.dc_bus_overvoltage_trip_level = 40
+        odrv.config.dc_bus_undervoltage_trip_level = 15
         odrv.config.dc_max_positive_current = 10
         odrv.config.dc_max_negative_current = -1
         odrv.config.brake_resistor0.enable = True
@@ -87,7 +91,6 @@ class MotorController:
         self.odrv0.axis0.requested_state = AxisState.CLOSED_LOOP_CONTROL
         while self.odrv0.axis0.current_state != AxisState.CLOSED_LOOP_CONTROL:
             time.sleep(0.1)
-        self.init_offset_pos = self.odrv0.axis0.pos_estimate
     
     def release_torque(self):
         self.odrv0.axis0.requested_state = AxisState.IDLE
@@ -100,14 +103,14 @@ class MotorController:
     def set_pos(self, pos: float, vel: float = 50 , torque: float = 0.3):
         # self.odrv0.axis0.controller.input_torque = torque
         # self.odrv0.axis0.controller.input_vel = vel/360
-        self.odrv0.axis0.controller.input_pos = (pos)/360 + self.init_offset_pos
+        self.odrv0.axis0.controller.input_pos = (pos)/360
     
     def set_velocity(self, vel: float = 0.001 , torque: float = 0.1):
         self.odrv0.axis0.controller.input_torque = torque
         self.odrv0.axis0.controller.input_vel = vel/360
     
     def get_position(self):
-        return (self.odrv0.axis0.pos_estimate) * 360 - self.init_offset_pos
+        return (self.odrv0.axis0.pos_estimate) * 360
     
     def get_velocity(self):
         return self.odrv0.axis0.vel_estimate
@@ -128,3 +131,20 @@ class MotorController:
         self.odrv0.clear_errors()
         self.odrv0.reboot()
         dump_errors(self.odrv0)
+
+    def set_loop_flow(self, steps: list[LoopFlowData]):
+        self.steps = steps
+        self.steps_loop_running = True
+        self.step_th = threading.Thread(target=self.steps_loop_th, daemon= True)
+        self.step_th.start()
+    
+    def steps_loop_th(self):
+        while self.steps_loop_running:
+            for step in self.steps:
+                self.set_pos(step.position)
+                time.sleep(step.delay_ms/1000)
+    
+    def stop_steps_loop(self):
+        self.steps_loop_running = False
+        self.step_th.join()
+
