@@ -22,6 +22,7 @@ class LoadCellreader:
         self.running = False
         self.last_read = LoadCellData()
         self.callback = None
+        self._line_buf = ""
 
     def parse_message(self, msg: str):
         try:
@@ -36,16 +37,23 @@ class LoadCellreader:
 
     def continuously_read(self):
         while self.running:
-            buffer = self.ser.read_until(expected=b'\n')
-            if not buffer:
+            # read all available bytes, decode to str
+            data = self.ser.read_all().decode('utf-8', errors='ignore')
+            if not data:
                 continue
-            values_decoded = buffer.decode()
-            # try:
-            #     val_map = json.loads(values_decoded)
-            #     self.callback(val_map)
-            # except:
-            self.parse_message(values_decoded)
-            self.ser.read_all() ## clear buffer
+
+            # add to leftover buffer
+            self._line_buf += data
+
+            # split on newline; all but the last are complete messages
+            lines = self._line_buf.split('\n')
+            self._line_buf = lines.pop()  # last item = incomplete (or empty) remainder
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                self.parse_message(line)
 
     def start(self, callback = None):
         self.setAutomaticMode()
@@ -143,7 +151,7 @@ class LoadCellreader:
 
     def connect_lc(self, event=None):
         if self.ser and self.ser.is_open:
-            self.ser.close()
+            self.disconnect()
 
         try:
             # try to connect serial force sensor

@@ -6,14 +6,17 @@ import datetime
 
 from matplotlib.figure import Figure 
 from matplotlib.backends.backend_tkagg import (
-    FigureCanvasTkAgg, 
-    NavigationToolbar2Tk
+    FigureCanvasTkAgg,
 ) 
 from motor_controller import MotorController, LoopFlowData
 
 import load_cell_reader
+import os
+
 # CSV file with date and time in file name
-csv_name = f"captan_drive_test_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+csv_name = f"results/captan_drive_test_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+# Ensure the 'results' folder exists, create it if it doesn't
+os.makedirs('results', exist_ok=True)
 csvfile = open(csv_name, 'w', newline='')
 fieldnames = ['timestamp', 'position', 'torque', 'velocity', 'force']
 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -22,7 +25,7 @@ writer.writeheader()
 # Initialize the Tkinter root window
 root = tk.Tk()
 root.title("Motor controller")
-root.geometry("300x200")
+root.geometry(None)
 
 SENSOR_COM = 'COM4'
 SERSOR_BR = 115200
